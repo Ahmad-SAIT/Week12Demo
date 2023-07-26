@@ -18,36 +18,44 @@ public class NoteServlet extends HttpServlet {
     protected void doGet(HttpServletRequest request, HttpServletResponse response)
             throws ServletException, IOException {
 
+        // if there is no AJAX action, just display the page
+        String action = request.getParameter("action");
+        if (action == null) {
+            getServletContext().getRequestDispatcher("/WEB-INF/notes.jsp").forward(request, response);
+            return;
+        }
+
+        // all AJAXy stuff here
         NoteService ns = new NoteService();
+        HttpSession session = request.getSession();
+        String email = (String) session.getAttribute("email");
 
         try {
-            HttpSession session = request.getSession();
-            String email = (String) session.getAttribute("email");
-            List<Note> notes = ns.getAll(email);
-            request.setAttribute("notes", notes);
-        } catch (Exception ex) {
-            Logger.getLogger(NoteServlet.class.getName()).log(Level.SEVERE, null, ex);
-            request.setAttribute("message", "error");
-        }
+            switch (action) {
+                case "getAll": // get all notes
+                    List<Note> notes = ns.getAll(email);
+                    String notesJson = getNotesJson(notes);
+                    response.getWriter().write(notesJson);
+                    break;
 
-        String action = request.getParameter("action");
-        if (action != null && action.equals("view")) {
-            try {
-                int id = Integer.parseInt(request.getParameter("noteId"));
-                Note note = ns.get(id);
-                request.setAttribute("selectedNote", note);
-            } catch (Exception ex) {
-                Logger.getLogger(NoteServlet.class.getName()).log(Level.SEVERE, null, ex);
+                case "get": // get one note based on the noteId
+                    int id = Integer.parseInt(request.getParameter("noteId"));
+                    Note note = ns.get(id); // getting data from DB
+                    String noteJson = getNoteJson(note);
+                    response.getWriter().write(noteJson);
+                    break;
             }
+        } catch (Exception e) {
+            Logger.getLogger(NoteServlet.class.getName()).log(Level.SEVERE, null, e);
+            response.sendError(404);
         }
-
-        getServletContext().getRequestDispatcher("/WEB-INF/notes.jsp").forward(request, response);
     }
 
     @Override
     protected void doPost(HttpServletRequest request, HttpServletResponse response)
             throws ServletException, IOException {
 
+        // only AJAXy stuff now!
         HttpSession session = request.getSession();
         String email = (String) session.getAttribute("email");
 
@@ -70,21 +78,35 @@ public class NoteServlet extends HttpServlet {
                 case "delete":
                     ns.delete(Integer.parseInt(noteId));
             }
-            request.setAttribute("message", action);
+            // status
+            response.setStatus(200);
+            response.getWriter().write("");
         } catch (Exception ex) {
             Logger.getLogger(NoteServlet.class.getName()).log(Level.SEVERE, null, ex);
-            request.setAttribute("message", "error");
+            response.sendError(500);
         }
-
-        try {
-            List<Note> notes = ns.getAll(email);
-            request.setAttribute("notes", notes);
-        } catch (Exception ex) {
-            Logger.getLogger(NoteServlet.class.getName()).log(Level.SEVERE, null, ex);
-            request.setAttribute("message", "error");
-        }
-
-        getServletContext().getRequestDispatcher("/WEB-INF/notes.jsp").forward(request, response);
     }
 
+    // add two methods
+    private String getNotesJson(List<Note> notes) {
+        String json = "[ ";
+        for (int i = 0; i < notes.size(); i++) {
+            if (i > 0) {
+                json += ", \n";
+            }
+            json += getNoteJson(notes.get(i));
+        }
+
+        json += " ]";
+        return json;
+    }
+
+    private String getNoteJson(Note note) {
+        String json = "{\n";
+        json += "\"noteId\" : " + note.getNoteId() + ", \n";
+        json += "\"title\" : \"" + note.getTitle() + "\", \n";
+        json += "\"contents\" : \"" + note.getContents() + "\"\n";
+        json += "}";
+        return json;
+    }
 }
